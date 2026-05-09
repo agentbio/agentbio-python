@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint & smoke test — Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Import check
+        run: |
+          python -c "
+          from agentbio import (
+              AgentBio, AgentBioError, TrustAction,
+              VerifyResult, EnrollResult, CreditScoreReport,
+              ReceiptRequest, ReputationReceipt, HeartbeatResult,
+              WalletStatus, RotateKeyResult, PushReceiptResult,
+              LookupResult, AgentDiscoveryResult, SearchResult,
+              BatchVerifyItem, BatchVerifyResult,
+          )
+          print('All imports OK')
+          ab = AgentBio()
+          print(f'AgentBio client OK — base URL: {ab.base_url}')
+          "
+
+      - name: Validate model construction
+        run: |
+          python -c "
+          from agentbio.models import TrustAction, VerifyResult
+          from datetime import datetime, timezone
+          now = datetime.now(timezone.utc)
+          r = VerifyResult(
+              agent_id='test', thumbprint='a'*64, identity_valid=True,
+              hardware_backed=False, reputation_score=4.2, verified_transactions=10,
+              total_transactions=12, risk_level='Low', recommendation='Allow',
+              action=TrustAction.PROCEED, summary='Test OK', flags=[],
+              verification_id='vrf_test', next_verify_after=now,
+              issued_at=now, data_freshness_utc=now, profile_url='https://example.com',
+          )
+          assert r.is_trusted
+          assert not r.should_abort
+          print(r)
+          print('VerifyResult OK')
+          "
