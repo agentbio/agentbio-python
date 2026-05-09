@@ -83,7 +83,7 @@ class AgentBio:
         self.base_url = base_url.rstrip("/")
         self.timeout  = timeout
         self._session = requests.Session()
-        self._session.headers.update({"User-Agent": "agentbio-python/1.0.419"})
+        self._session.headers.update({"User-Agent": "agentbio-python/1.1.1"})
 
         if api_key:
             self._session.headers.update({"Authorization": f"Bearer {api_key}"})

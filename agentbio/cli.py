@@ -439,15 +439,28 @@ def cmd_info(args: argparse.Namespace) -> int:
 
     _header("AgentBio API Info")
     print()
-    _kv("Version",     data.get("version", "unknown"))
-    _kv("Base URL",    ab.base_url)
-    _kv("Endpoints",   str(len(data.get("endpoints", []))))
+    _kv("Version",   data.get("version", "unknown"))
+    _kv("Base URL",  ab.base_url)
+    _kv("Endpoints", str(len(data.get("endpoints", []))))
 
     limits = data.get("rateLimits", {})
     if limits:
-        _kv("Rate limits", "")
-        for tier, rpm in limits.items():
-            _kv(f"  {tier}", f"{rpm} req/min")
+        print()
+        print(f"  {dim('Rate Limits:')}")
+        for name, val in limits.items():
+            if isinstance(val, dict):
+                free    = val.get("freeTier",     val.get("free",     None))
+                pro     = val.get("proTier",      val.get("pro",      None))
+                biz     = val.get("businessTier", val.get("business", None))
+                monthly = val.get("periodMonthly", False)
+                period  = "/month" if monthly else "/min"
+                parts   = []
+                if free is not None: parts.append(f"Free: {free}{period}")
+                if pro  is not None: parts.append(f"Pro: {pro}{period}")
+                if biz  is not None: parts.append(f"Business: {biz}{period}")
+                _kv(f"  {name}", "  ·  ".join(parts) if parts else str(val))
+            else:
+                _kv(f"  {name}", f"{val} req/min")
 
     print()
     return 0
