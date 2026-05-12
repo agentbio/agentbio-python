@@ -6,7 +6,7 @@ Full coverage of the AgentBio Agent Trust API v1.
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 
@@ -83,7 +83,7 @@ class AgentBio:
         self.base_url = base_url.rstrip("/")
         self.timeout  = timeout
         self._session = requests.Session()
-        self._session.headers.update({"User-Agent": "agentbio-python/1.1.1"})
+        self._session.headers.update({"User-Agent": "agentbio-python/1.0.419"})
 
         if api_key:
             self._session.headers.update({"Authorization": f"Bearer {api_key}"})
@@ -288,6 +288,106 @@ class AgentBio:
         self._raise_for_status(resp)
         return self._parse_enroll(resp.json())
 
+    def enroll_or_load(
+        self,
+        agent_id:       str,
+        contact_email:  str,
+        key_env:        str,
+        display_name:   Optional[str] = None,
+        description:    Optional[str] = None,
+        wallet_address: Optional[str] = None,
+    ) -> EnrollResult:
+        """
+        Enroll an agent on first boot, or load its existing API key on every
+        subsequent boot — automatically.
+
+        This is the recommended pattern for production agents. On the very first
+        run, the agent is enrolled and the API key is printed to stdout so the
+        developer can store it in their environment. On every subsequent run,
+        the key is read from the environment variable named by ``key_env``.
+
+        Args:
+            agent_id:       Unique agent identifier.
+            contact_email:  Email for the account.
+            key_env:        Name of the environment variable that holds the API key
+                            e.g. ``"AGENTBIO_API_KEY"``. If the variable is set,
+                            enrollment is skipped and the key is used directly.
+            display_name:   Human-readable name (defaults to agent_id).
+            description:    What this agent does.
+            wallet_address: Base wallet address for x402 autonomous payments.
+
+        Returns:
+            EnrollResult. On first boot, ``api_key`` contains the new key.
+            On subsequent boots, ``api_key`` is loaded from the environment.
+
+        Raises:
+            RuntimeError: If the agent is already enrolled but ``key_env`` is
+                          not set in the environment — the developer needs to
+                          store the key from the first run.
+
+        Example:
+            # Works on first boot AND every restart after that.
+            agent = ab.enroll_or_load(
+                agent_id      = "my-trading-agent",
+                contact_email = "ops@mycompany.com",
+                key_env       = "AGENTBIO_API_KEY",
+                description   = "Autonomous DEX trading agent",
+            )
+            # API key is now set on the client automatically.
+            ab.heartbeat(agent_id=agent.agent_id)
+        """
+        import os
+
+        # If the key is already in the environment, skip enrollment entirely
+        existing_key = os.environ.get(key_env)
+        if existing_key:
+            self.api_key = existing_key
+            self._session.headers.update({"Authorization": f"Bearer {existing_key}"})
+            return EnrollResult(
+                success        = True,
+                agent_id       = agent_id,
+                thumbprint     = "",    # populated on next heartbeat
+                api_key        = existing_key,
+                is_new_account = False,
+                profile_url    = f"{self.base_url}/agent/{agent_id}",
+                verify_url     = f"{self.base_url}/api/public/verify/",
+                next_steps     = [],
+            )
+
+        # First boot — attempt enrollment
+        try:
+            result = self.enroll(
+                agent_id       = agent_id,
+                contact_email  = contact_email,
+                display_name   = display_name,
+                description    = description,
+                wallet_address = wallet_address,
+            )
+            # Set key on client so subsequent calls work immediately
+            self.api_key = result.api_key
+            self._session.headers.update({"Authorization": f"Bearer {result.api_key}"})
+
+            print(
+                f"\n{'=' * 60}\n"
+                f"  AgentBio: agent '{agent_id}' enrolled successfully.\n"
+                f"  Store your API key in the environment now:\n\n"
+                f"    export {key_env}={result.api_key}\n\n"
+                f"  This key will not be shown again.\n"
+                f"{'=' * 60}\n"
+            )
+            return result
+
+        except AgentBioError as e:
+            if e.status_code != 409:
+                raise
+
+            # Already enrolled — key must be in the environment
+            raise RuntimeError(
+                f"Agent '{agent_id}' is already enrolled but {key_env!r} is not set "
+                f"in the environment. Set it to your API key and restart:\n\n"
+                f"    export {key_env}=agentbio_your_key_here"
+            ) from None
+
     # ── Heartbeat ──────────────────────────────────────────────────────────────
 
     def heartbeat(
@@ -332,7 +432,73 @@ class AgentBio:
             thumbprint  = thumbprint,
         )
 
-    # ── Receipt workflow ───────────────────────────────────────────────────────
+    def start_heartbeat(
+        self,
+        agent_id:          Optional[str] = None,
+        interval_minutes:  float         = 5.0,
+        runtime_info:      Optional[str] = None,
+        on_error:          Optional[Any] = None,
+    ) -> "HeartbeatHandle":
+        """
+        Start an automatic background heartbeat that runs forever.
+
+        Spawns a daemon thread that calls ``heartbeat()`` immediately on start,
+        then again every ``interval_minutes``. The thread is a daemon — it will
+        not prevent your process from exiting. Call ``.stop()`` on the returned
+        handle to stop it cleanly.
+
+        Args:
+            agent_id:         Agent ID to ping. Omit to ping all on the account.
+            interval_minutes: How often to send a heartbeat (default: 5 minutes).
+                              Minimum: 1 minute. Values below 1 are clamped to 1.
+            runtime_info:     Free-text runtime label included in each heartbeat.
+            on_error:         Optional callable(exception) called on heartbeat
+                              failure. If omitted, errors are logged and the
+                              thread continues — a single failure never stops it.
+
+        Returns:
+            HeartbeatHandle — call ``.stop()`` to stop the background thread.
+
+        Example:
+            handle = ab.start_heartbeat(
+                agent_id        = "my-agent",
+                interval_minutes = 5,
+                runtime_info    = "langchain/0.2",
+            )
+
+            # ... your agent does its work ...
+
+            handle.stop()   # clean shutdown (optional — daemon thread stops on exit)
+        """
+        import threading
+        import logging
+
+        logger   = logging.getLogger("agentbio.heartbeat")
+        interval = max(1.0, interval_minutes) * 60.0   # clamp to 1 minute minimum
+        stop_evt = threading.Event()
+
+        def _run() -> None:
+            while not stop_evt.is_set():
+                try:
+                    self.heartbeat(agent_id=agent_id, runtime_info=runtime_info)
+                    logger.debug(
+                        "AgentBio heartbeat OK (agent=%s interval=%.0fs)",
+                        agent_id or "all", interval,
+                    )
+                except Exception as exc:
+                    logger.warning("AgentBio heartbeat failed: %s", exc)
+                    if on_error is not None:
+                        try:
+                            on_error(exc)
+                        except Exception:
+                            pass    # never let the callback crash the thread
+
+                # Wait for the interval OR until stop() is called
+                stop_evt.wait(timeout=interval)
+
+        thread        = threading.Thread(target=_run, name="agentbio-heartbeat", daemon=True)
+        thread.start()
+        return HeartbeatHandle(stop_event=stop_evt, thread=thread)
 
     def generate_receipt(
         self,

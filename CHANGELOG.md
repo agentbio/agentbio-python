@@ -7,6 +7,41 @@ Versions match the PyPI release tags.
 
 ---
 
+## [1.1.3] — 2026-05-09
+
+### Added
+- `enroll_or_load(agent_id, contact_email, key_env, ...)` — enroll on first boot, load existing key on every subsequent boot. Eliminates the most common beginner error (crashing on 409 when already enrolled).
+- `start_heartbeat(agent_id, interval_minutes, ...)` → `HeartbeatHandle` — starts a daemon background thread that pings AgentBio automatically every N minutes. No polling loop required. Call `.stop()` for clean shutdown.
+- `HeartbeatHandle` model — returned by `start_heartbeat()`. Has `.is_running` property and `.stop(timeout)` method.
+
+---
+
+## [1.1.2] — 2026-05-09
+
+### Added
+- `get_auto_countersign_policy()` — read the current auto-countersign policy
+- `set_auto_countersign_policy(enabled, min_score)` — configure server-side autonomous receipt countersigning. Enabled by default — agents build reputation with zero extra code.
+
+---
+
+## [1.1.1] — 2026-05-08
+
+### Fixed
+- `agentbio info` CLI command now formats rate limits cleanly instead of displaying raw JSON objects.
+
+---
+
+## [1.1.0] — 2026-05-08
+
+### Added
+- Full CLI: `agentbio verify`, `enroll`, `heartbeat`, `search`, `credit`, `pay`, `info`, `key rotate`
+- `agentbio pay --thumbprint ... --key ... --testnet` — full x402 test payment flow on Base Sepolia
+- `python -m agentbio` module entry point
+- `console_scripts` entry point — `agentbio` command available after `pip install agentbio`
+- `eth-account` optional dependency via `pip install agentbio[pay]`
+
+---
+
 ## [1.0.419] — 2026-05-07
 
 ### Added

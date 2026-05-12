@@ -51,6 +51,30 @@ Quick start:
     # They call: ab.countersign_receipt(req.receipt_request_json)
     # You call:  ab.import_receipt(countersigned_json)
 
+    # Enroll on first boot, load key on subsequent boots
+    agent = ab.enroll_or_load(
+        agent_id      = "my-agent",
+        contact_email = "you@example.com",
+        key_env       = "AGENTBIO_API_KEY",
+    )
+
+    # Automatic heartbeat every 5 minutes — no polling loop needed
+    handle = ab.start_heartbeat(agent_id="my-agent", interval_minutes=5)
+    # ... agent does its work ...
+    handle.stop()   # optional — daemon thread stops automatically on exit
+
+    # Receipt workflow (builds reputation score)
+    req = ab.generate_receipt(
+        agent_id="my-agent",
+        platform="OpenClaw",
+        description="Completed research task",
+        counterparty_id="their-agent",
+        suggested_score=4.5,
+    )
+    # Forward req.receipt_request_json to counterparty
+    # They call: ab.countersign_receipt(req.receipt_request_json)
+    # You call:  ab.import_receipt(countersigned_json)
+
     # Credit score
     report = ab.credit_score("40d870cd...")
     print(f"{report.credit_score}/850 ({report.score_band})")
@@ -68,6 +92,7 @@ from .models import (
     ReceiptRequest,
     ReputationReceipt,
     HeartbeatResult,
+    HeartbeatHandle,
     WalletStatus,
     RotateKeyResult,
     PushReceiptResult,
@@ -78,7 +103,7 @@ from .models import (
     BatchVerifyResult,
 )
 
-__version__ = "1.0.419"
+__version__ = "1.1.3"
 __all__ = [
     "AgentBio",
     "AgentBioError",
@@ -89,6 +114,7 @@ __all__ = [
     "ReceiptRequest",
     "ReputationReceipt",
     "HeartbeatResult",
+    "HeartbeatHandle",
     "WalletStatus",
     "RotateKeyResult",
     "PushReceiptResult",

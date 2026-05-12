@@ -4,8 +4,11 @@ AgentBio SDK data models.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from enum import Enum
+
+if TYPE_CHECKING:
+    import threading
 
 
 class TrustAction(str, Enum):
@@ -323,3 +326,43 @@ class BatchVerifyResult:
 
     def __str__(self) -> str:
         return f"BatchVerify: {self.found}/{self.total} found"
+
+
+class HeartbeatHandle:
+    """
+    Handle returned by ``AgentBio.start_heartbeat()``.
+
+    Wraps the background daemon thread that sends periodic heartbeats.
+    Call ``.stop()`` for a clean shutdown; the thread is a daemon so it
+    will also stop automatically when the main process exits.
+
+    Attributes:
+        is_running: True while the heartbeat thread is alive.
+    """
+
+    def __init__(self, stop_event: "threading.Event", thread: "threading.Thread") -> None:
+        self._stop_event = stop_event
+        self._thread     = thread
+
+    @property
+    def is_running(self) -> bool:
+        """True while the background heartbeat thread is alive."""
+        return self._thread.is_alive()
+
+    def stop(self, timeout: float = 10.0) -> None:
+        """
+        Stop the background heartbeat thread cleanly.
+
+        Signals the thread to stop and waits up to ``timeout`` seconds for it
+        to finish its current sleep interval. Returns immediately if the thread
+        has already stopped.
+
+        Args:
+            timeout: Maximum seconds to wait for the thread to stop (default 10).
+        """
+        self._stop_event.set()
+        self._thread.join(timeout=timeout)
+
+    def __repr__(self) -> str:
+        status = "running" if self.is_running else "stopped"
+        return f"HeartbeatHandle(status={status!r})"

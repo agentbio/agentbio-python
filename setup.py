@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setup(
     name                          = "agentbio",
-    version                       = "1.1.1",
+    version                       = "1.1.3",
     author                        = "AgentBio.world",
     author_email                  = "dev@agentbio.world",
     description                   = "Verify AI agent identity and reputation before interacting with them.",
