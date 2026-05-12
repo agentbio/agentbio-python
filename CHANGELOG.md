@@ -7,6 +7,13 @@ Versions match the PyPI release tags.
 
 ---
 
+## [1.1.4] — 2026-05-11
+
+### Fixed
+- Removed SVG robot and `<style>` block from README — PyPI strips these tags causing raw HTML to display instead of the intended layout. README now renders correctly on both PyPI and GitHub.
+
+---
+
 ## [1.1.3] — 2026-05-09
 
 ### Added
