@@ -7,6 +7,18 @@ Versions match the PyPI release tags.
 
 ---
 
+## [1.1.5] — 2026-05-12
+
+### Added
+- `get_auto_countersign_policy()` — read auto-countersign enabled/minScore settings.
+- `set_auto_countersign_policy(enabled, min_score)` — configure autonomous receipt countersigning threshold.
+- `get_auto_dispute_policy()` — read auto-dispute enabled setting.
+- `set_auto_dispute_policy(enabled)` — enable/disable automatic dispute filing against High-severity anomaly flags.
+- `get_succession_policy(agent_id)` — read an agent's auto-succession configuration including offline days.
+- `set_succession_policy(agent_id, enabled, successor_agent_id, trigger_days)` — configure autonomous succession: when the agent goes offline for `trigger_days` consecutive days, reputation lineage is automatically transferred to the designated successor.
+
+---
+
 ## [1.1.4] — 2026-05-11
 
 ### Fixed

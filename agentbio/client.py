@@ -782,6 +782,234 @@ class AgentBio:
         self._session.headers.update({"Authorization": f"Bearer {result.new_api_key}"})
         return result
 
+    # ── Auto-Countersign policy ────────────────────────────────────────────────
+
+    def get_auto_countersign_policy(self) -> dict:
+        """
+        Return the caller's current auto-countersign policy.
+
+        Auto-countersign is **on by default** (enabled=True, minScore=3.5).
+        The server countersigns incoming receipt requests on your behalf
+        automatically within 5 minutes — no code required.
+
+        Returns:
+            dict with keys:
+                enabled  (bool)  — whether auto-countersign is active.
+                minScore (float) — minimum trust score required to countersign.
+
+        Example:
+            policy = ab.get_auto_countersign_policy()
+            print(policy["enabled"])    # True
+            print(policy["minScore"])   # 3.5
+        """
+        self._require_key("get_auto_countersign_policy")
+        url  = f"{self.base_url}/api/v1/auto-countersign/policy"
+        resp = self._session.get(url, timeout=self.timeout)
+        self._raise_for_status(resp)
+        return resp.json()
+
+    def set_auto_countersign_policy(
+        self,
+        enabled:   bool  = True,
+        min_score: float = 3.5,
+    ) -> dict:
+        """
+        Update the auto-countersign policy.
+
+        Changes take effect within 5 minutes — the next time the server runs
+        its auto-countersign cycle.
+
+        Args:
+            enabled:   Enable or disable auto-countersign. Default True.
+            min_score: Minimum trust score (0.0–5.0) a requesting agent must
+                       have before the server will countersign on your behalf.
+                       Block-recommended agents are never countersigned
+                       regardless of this value. Default 3.5.
+
+        Returns:
+            dict confirming the updated policy (enabled, minScore).
+
+        Example:
+            # Raise the bar — only countersign highly trusted agents
+            ab.set_auto_countersign_policy(enabled=True, min_score=4.5)
+
+            # Accept any trusted agent
+            ab.set_auto_countersign_policy(enabled=True, min_score=0.0)
+
+            # Opt out — handle countersigning manually
+            ab.set_auto_countersign_policy(enabled=False)
+        """
+        self._require_key("set_auto_countersign_policy")
+        url  = f"{self.base_url}/api/v1/auto-countersign/policy"
+        resp = self._session.put(
+            url,
+            json={"enabled": enabled, "minScore": min_score},
+            timeout=self.timeout,
+        )
+        self._raise_for_status(resp)
+        return resp.json()
+
+    # ── Auto-Dispute policy ────────────────────────────────────────────────────
+
+    def get_auto_dispute_policy(self) -> dict:
+        """
+        Return the caller's current auto-dispute policy.
+
+        Auto-dispute is **off by default** — it is an explicit opt-in because
+        disputing a receipt notifies the platform and consumes monthly quota
+        (Free: 3/month, Pro+: unlimited). Only High-severity anomaly flags
+        trigger auto-dispute.
+
+        Returns:
+            dict with key:
+                enabled (bool) — whether auto-dispute is active.
+
+        Example:
+            policy = ab.get_auto_dispute_policy()
+            print(policy["enabled"])    # False
+        """
+        self._require_key("get_auto_dispute_policy")
+        url  = f"{self.base_url}/api/v1/auto-dispute/policy"
+        resp = self._session.get(url, timeout=self.timeout)
+        self._raise_for_status(resp)
+        return resp.json()
+
+    def set_auto_dispute_policy(self, enabled: bool) -> dict:
+        """
+        Enable or disable automatic dispute filing.
+
+        When enabled, the server automatically files disputes against
+        High-severity anomaly flags on incoming receipts — score outliers,
+        velocity spikes, and suspicious patterns — without any manual review.
+
+        Disputes respect your monthly quota. If the quota is exhausted, no
+        further auto-disputes are filed until the next period.
+
+        Args:
+            enabled: True to enable auto-dispute; False to disable.
+
+        Returns:
+            dict confirming the updated policy (enabled).
+
+        Example:
+            # Enable — system automatically challenges suspicious receipts
+            ab.set_auto_dispute_policy(enabled=True)
+
+            # Disable — review anomaly flags manually on the Disputes page
+            ab.set_auto_dispute_policy(enabled=False)
+        """
+        self._require_key("set_auto_dispute_policy")
+        url  = f"{self.base_url}/api/v1/auto-dispute/policy"
+        resp = self._session.put(
+            url,
+            json={"enabled": enabled},
+            timeout=self.timeout,
+        )
+        self._raise_for_status(resp)
+        return resp.json()
+
+    # ── Succession policy ──────────────────────────────────────────────────────
+
+    def get_succession_policy(self, agent_id: str) -> dict:
+        """
+        Return the auto-succession policy for a specific agent.
+
+        Auto-succession is **off by default** — it requires explicit opt-in
+        because it permanently transfers the agent's reputation lineage.
+
+        Args:
+            agent_id: The agent to query.
+
+        Returns:
+            dict with keys:
+                agentId                    (str)            — agent ID queried.
+                enabled                    (bool)           — whether auto-succession is active.
+                designatedSuccessorAgentId (str | None)     — the configured successor.
+                triggerDays                (int)            — offline days before trigger (default 30).
+                triggeredAt                (str | None)     — ISO timestamp if succession has fired.
+                lastSeenAt                 (str | None)     — agent's most recent heartbeat.
+                offlineDays                (float | None)   — days since last heartbeat.
+
+        Example:
+            policy = ab.get_succession_policy("my-agent")
+            print(policy["enabled"])         # False
+            print(policy["triggerDays"])     # 30
+            print(policy["offlineDays"])     # 2.4
+        """
+        self._require_key("get_succession_policy")
+        url  = f"{self.base_url}/api/v1/agents/{agent_id}/succession-policy"
+        resp = self._session.get(url, timeout=self.timeout)
+        self._raise_for_status(resp)
+        return resp.json()
+
+    def set_succession_policy(
+        self,
+        agent_id:              str,
+        enabled:               bool,
+        successor_agent_id:    Optional[str] = None,
+        trigger_days:          int           = 30,
+    ) -> dict:
+        """
+        Configure the auto-succession policy for a specific agent.
+
+        When enabled, the server automatically initiates succession to the
+        designated successor after the agent has been offline (no heartbeat)
+        for ``trigger_days`` consecutive days. Both agents must belong to the
+        same account. Succession transfers the predecessor's reputation lineage
+        at 80% of its current score — permanently.
+
+        Call ``start_heartbeat()`` to keep your agent's last-seen timestamp
+        fresh and prevent accidental succession triggers.
+
+        Args:
+            agent_id:           The agent to configure.
+            enabled:            True to enable auto-succession; False to disable.
+            successor_agent_id: AgentId of the successor. Required when
+                                enabled=True. Must be an active agent on the
+                                same account. Cannot be the same as agent_id.
+            trigger_days:       Offline days before succession fires.
+                                Minimum 7, maximum 365. Default 30.
+
+        Returns:
+            dict confirming the updated policy and a human-readable message.
+
+        Raises:
+            AgentBioError(400): if the successor is not found, is the same
+                                agent, or trigger_days is out of range.
+            AgentBioError(404): if agent_id is not found on this account.
+
+        Example:
+            # Enable — succession fires after 30 days offline
+            ab.set_succession_policy(
+                agent_id           = "my-agent",
+                enabled            = True,
+                successor_agent_id = "my-agent-v2",
+                trigger_days       = 30,
+            )
+
+            # Extend the window — give the agent 90 days before succession
+            ab.set_succession_policy(
+                agent_id           = "my-agent",
+                enabled            = True,
+                successor_agent_id = "my-agent-v2",
+                trigger_days       = 90,
+            )
+
+            # Disable — remove the configured succession
+            ab.set_succession_policy(agent_id="my-agent", enabled=False)
+        """
+        self._require_key("set_succession_policy")
+        url  = f"{self.base_url}/api/v1/agents/{agent_id}/succession-policy"
+        body: dict = {
+            "enabled":     enabled,
+            "triggerDays": trigger_days,
+        }
+        if successor_agent_id is not None:
+            body["designatedSuccessorAgentId"] = successor_agent_id
+        resp = self._session.put(url, json=body, timeout=self.timeout)
+        self._raise_for_status(resp)
+        return resp.json()
+
     # ── Meta ───────────────────────────────────────────────────────────────────
 
     def meta(self) -> dict:

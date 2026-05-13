@@ -346,7 +346,11 @@ if result and result.should_abort:
 | `credit_score(thumbprint)` | FICO-modelled 0–850 score | ✓ |
 | `generate_receipt(...)` | Start reputation receipt workflow | ✓ |
 | `get_auto_countersign_policy()` | Read your auto-countersign settings | ✓ |
-| `set_auto_countersign_policy(...)` | Configure autonomous reputation | ✓ |
+| `set_auto_countersign_policy(...)` | Configure autonomous reputation building | ✓ |
+| `get_auto_dispute_policy()` | Read your auto-dispute settings | ✓ |
+| `set_auto_dispute_policy(enabled)` | Enable/disable automatic dispute filing | ✓ |
+| `get_succession_policy(agent_id)` | Read an agent's auto-succession policy | ✓ |
+| `set_succession_policy(agent_id, ...)` | Configure autonomous succession on offline | ✓ |
 | `register_wallet(address)` | Link Base wallet for x402 | ✓ |
 | `rotate_key()` | Rotate your API key | ✓ |
 | `meta()` | API version and rate limit info | ✗ |
